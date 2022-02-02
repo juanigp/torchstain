@@ -77,7 +77,7 @@ class NumpyMacenkoNormalizer(HENormalizer):
         self.HERef = HE
         self.maxCRef = maxC
 
-    def normalize(self, I, Io=240, alpha=1, beta=0.15, stains=True):
+    def normalize(self, I, bool_mask = None, Io=240, alpha=1, beta=0.15, stains=True):
         ''' Normalize staining appearence of H&E stained images
 
         Example use:
@@ -98,9 +98,14 @@ class NumpyMacenkoNormalizer(HENormalizer):
         '''
         h, w, c = I.shape
         I = I.reshape((-1,3))
-
+        
         HE, C, maxC = self.__compute_matrices(I, Io, alpha, beta)
-
+        
+        if bool_mask:
+            mask = mask.reshape((-1))
+            valid_pixels = I[bool_mask]
+            HE, _, maxC = self.__compute_matrices(valid_pixels, Io, alpha, beta)
+            
         maxC = np.divide(maxC, self.maxCRef)
         C2 = np.divide(C, maxC[:, np.newaxis])
 
