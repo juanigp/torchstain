@@ -1,5 +1,6 @@
 import numpy as np
 from torchstain.normalizers.he_normalizer import HENormalizer
+import scipy.linalg
 
 """
 Source code adapted from: https://github.com/schaugf/HEnorm_python
@@ -54,7 +55,7 @@ class NumpyMacenkoNormalizer(HENormalizer):
 
         return C
 
-    def __compute_matrices(self, I, Io, alpha, beta):
+    def compute_matrices(self, I, Io, alpha, beta):
         I = I.reshape((-1,3))
 
         OD, ODhat = self.__convert_rgb2od(I, Io=Io, beta=beta)
@@ -71,13 +72,24 @@ class NumpyMacenkoNormalizer(HENormalizer):
 
         return HE, C, maxC
 
+    # my mod
+    def compute_OD_HE(self, I, Io, alpha, beta):
+        I = I.reshape((-1,3))
+        OD, ODhat = self.__convert_rgb2od(I, Io=Io, beta=beta)
+        # compute eigenvectors
+        _, eigvecs = scipy.linalg.eigh(np.cov(ODhat.T))
+        HE = self.__find_HE(ODhat, eigvecs, alpha) 
+
+        return (OD, HE)
+
+
     def fit(self, I, Io=240, alpha=1, beta=0.15):
-        HE, _, maxC = self.__compute_matrices(I, Io, alpha, beta)
+        HE, _, maxC = self.compute_matrices(I, Io, alpha, beta)
 
         self.HERef = HE
         self.maxCRef = maxC
 
-    def normalize(self, I, bool_mask = None, Io=240, alpha=1, beta=0.15, stains=True):
+    def normalize(self, I, precalc_HE=None, precalc_maxC=None, Io=240, alpha=1, beta=0.15, stains=True):
         ''' Normalize staining appearence of H&E stained images
 
         Example use:
@@ -99,13 +111,24 @@ class NumpyMacenkoNormalizer(HENormalizer):
         h, w, c = I.shape
         I = I.reshape((-1,3))
         
-        HE, C, maxC = self.__compute_matrices(I, Io, alpha, beta)
+        # HE, C, maxC = self.compute_matrices(I, Io, alpha, beta)
+        OD, HE = self.compute_OD_HE(I, Io, alpha, beta)
+
+        if precalc_HE is not None:
+            HE = precalc_HE
+        # if bool_mask is not None:
+        #     bool_mask = bool_mask.reshape((-1))
+        #     valid_pixels = I[bool_mask]
+        #     _, HE = self.compute_OD_HE(valid_pixels, Io, alpha, beta)
+        #     # HE, _, maxC = self.compute_matrices(valid_pixels, Io, alpha, beta)
         
-        if bool_mask:
-            mask = mask.reshape((-1))
-            valid_pixels = I[bool_mask]
-            HE, _, maxC = self.__compute_matrices(valid_pixels, Io, alpha, beta)
-            
+        C = self.__find_concentration(OD, HE)
+
+        if precalc_maxC is not None:
+            maxC = precalc_maxC
+        else:
+            maxC = np.array([np.percentile(C[0,:], 99), np.percentile(C[1,:],99)])
+
         maxC = np.divide(maxC, self.maxCRef)
         C2 = np.divide(C, maxC[:, np.newaxis])
 

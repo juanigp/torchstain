@@ -19,7 +19,7 @@ setup(
     install_requires=[
         'torch',
         'numpy',
-        'tensorflow'
+        # 'tensorflow'
     ],
     python_requires='>=3.6'
 )
